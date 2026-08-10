@@ -125,6 +125,182 @@ function initTheme() {
 }
 
 // ---------------------------------------------------------------------------
+// Templates: contents copied verbatim from shiki-core/src/templates.rs's
+// `ensure_defaults()` list (same filename, same literal `{{title}}`/
+// `{{date}}` placeholders, unsubstituted) — same "keep the marketing site's
+// copy in sync with the source of truth" convention the theme palettes and
+// documentation.html's reference tables already follow. If a template is
+// added, removed, or its contents change there, update this array too.
+// ---------------------------------------------------------------------------
+
+const TEMPLATES = [
+  // The picker's actual first entry (`open_template_picker`, shiki-tui/src/
+  // key_handlers.rs) is "(blank, no template)", not the `default.md` file —
+  // an empty body and `frontmatter.template` left `None`/`null`, same as
+  // every other real note. This chip mirrors that, not `default.md`.
+  { id: "blank", label: "Blank", exampleTitle: "Book recommendations", content: "", noTemplate: true },
+  {
+    id: "daily",
+    label: "Daily",
+    // Real daily notes are titled "{date} Daily" (shiki-core/src/daily.rs's
+    // `create_or_open`) — shortened to just "Daily" here since the date
+    // already appears in its own `date:` field right above. The template
+    // body only ever substitutes `{{date}}`, not `{{title}}`, so the H1 and
+    // the frontmatter title genuinely don't match anyway, unlike every
+    // other template here.
+    exampleTitle: "Daily",
+    content: "# {{date}}\n\n## Tasks\n\n- [ ] \n\n## Notes\n\n",
+  },
+  {
+    id: "meeting",
+    label: "Meeting",
+    exampleTitle: "Sprint planning",
+    content:
+      "# {{title}}\n\nDate: {{date}}\n\n## Attendees\n\n## Agenda\n\n## Notes\n\n## Action Items\n\n",
+  },
+  {
+    id: "standup",
+    label: "Standup",
+    exampleTitle: "Daily standup",
+    content: "# {{title}}\n\nDate: {{date}}\n\n## Yesterday\n\n## Today\n\n## Blockers\n\n",
+  },
+  {
+    id: "retro",
+    label: "Retro",
+    exampleTitle: "Sprint 12 retro",
+    content:
+      "# {{title}}\n\nDate: {{date}}\n\n## What Went Well\n\n## What Didn't Go Well\n\n## Action Items\n\n- [ ] \n",
+  },
+  {
+    id: "1on1",
+    label: "1:1",
+    exampleTitle: "1-on-1 with Alex",
+    content:
+      "# {{title}}\n\nDate: {{date}}\n\n## Talking Points\n\n## Notes\n\n## Action Items\n\n- [ ] \n",
+  },
+  {
+    id: "bug",
+    label: "Bug",
+    exampleTitle: "Login button unresponsive on mobile",
+    content:
+      "# {{title}}\n\nDate: {{date}}\nSeverity: \nStatus: Open\n\n## Summary\n\n## Steps to Reproduce\n\n1. \n2. \n3. \n\n## Expected Behavior\n\n## Actual Behavior\n\n## Environment\n\n- \n\n## Fix Notes\n\n",
+  },
+  {
+    id: "spec",
+    label: "Spec",
+    exampleTitle: "Notebook encryption",
+    content:
+      "# {{title}}\n\nDate: {{date}}\nStatus: Draft\n\n## Problem\n\n## Goals\n\n## Non-Goals\n\n## Proposal\n\n## Alternatives Considered\n\n## Open Questions\n\n",
+  },
+  {
+    id: "postmortem",
+    label: "Postmortem",
+    exampleTitle: "API outage, August 3",
+    content:
+      "# {{title}}\n\nDate: {{date}}\nSeverity: \nStatus: Draft\n\n## Summary\n\n## Timeline\n\n## Root Cause\n\n## Impact\n\n## Action Items\n\n- [ ] \n\n## Lessons Learned\n\n",
+  },
+  {
+    id: "review",
+    label: "Review",
+    exampleTitle: "Streaming export pull request",
+    content:
+      "# {{title}}\n\nDate: {{date}}\nPR/MR: \n\n## Summary\n\n## Comments\n\n## Decision\n\n- [ ] Approved\n- [ ] Changes requested\n",
+  },
+  {
+    id: "weekly",
+    label: "Weekly",
+    exampleTitle: "Week 32 update",
+    content:
+      "# {{title}}\n\nWeek of: {{date}}\n\n## Highlights\n\n## Metrics\n\n## Challenges\n\n## Next Week Priorities\n\n- [ ] \n",
+  },
+  {
+    id: "brainstorm",
+    label: "Brainstorm",
+    exampleTitle: "Onboarding flow ideas",
+    content:
+      "# {{title}}\n\nDate: {{date}}\n\n## Problem / Prompt\n\n## Ideas\n\n- \n\n## Next Steps\n\n- [ ] \n",
+  },
+];
+
+const DEFAULT_TEMPLATE_ID = "meeting";
+// Fixed example values a note created "right now" from one of these
+// templates would actually get — matches `Frontmatter::new` (shiki-core/
+// src/note.rs) plus the vars `create_note_with_template` substitutes
+// (shiki-tui/src/key_handlers.rs): `tags`/`links` default to `[]`,
+// `notebook` is whichever notebook is selected, and `template` is set to
+// the template's own filename stem once it's actually applied.
+const TEMPLATE_EXAMPLE_DATE = "2026-08-10";
+const TEMPLATE_EXAMPLE_NOTEBOOK = "personal";
+
+// Same `{{key}}` substitution `Template::render` does (shiki-core/src/
+// templates.rs) — a single left-to-right pass, unknown placeholders left
+// untouched. None of the 12 built-in templates contain a value that itself
+// looks like `{{...}}`, so the simpler non-resubstituting-safe approach
+// there isn't needed here.
+function renderTemplateVars(content, vars) {
+  return content.replace(/\{\{(\w+)\}\}/g, (match, key) =>
+    Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : match
+  );
+}
+
+// Builds the exact file shiki would write for this template — real YAML
+// frontmatter (field order matches `Frontmatter`'s own declaration order:
+// title, date, tags, notebook, links, template) followed by `---\n\n` and
+// the rendered body, mirroring `Note::to_file_contents` byte-for-byte.
+function renderNoteExample(template) {
+  const vars = {
+    title: template.exampleTitle,
+    date: TEMPLATE_EXAMPLE_DATE,
+    time: "09:30",
+    notebook: TEMPLATE_EXAMPLE_NOTEBOOK,
+  };
+  const body = renderTemplateVars(template.content, vars);
+  const frontmatter = [
+    `title: ${template.exampleTitle}`,
+    `date: ${TEMPLATE_EXAMPLE_DATE}`,
+    `tags: []`,
+    `notebook: ${TEMPLATE_EXAMPLE_NOTEBOOK}`,
+    `links: []`,
+    `template: ${template.noTemplate ? "null" : template.id}`,
+  ].join("\n");
+  return { frontmatter, body };
+}
+
+function applyTemplatePreview(templateId) {
+  const template = TEMPLATES.find((t) => t.id === templateId) || TEMPLATES.find((t) => t.id === DEFAULT_TEMPLATE_ID);
+
+  document.querySelectorAll(".template-chip").forEach((el) => {
+    el.classList.toggle("active", el.dataset.templateId === template.id);
+  });
+
+  const title = document.getElementById("template-preview-title");
+  if (title) title.textContent = `shiki — template: ${template.id}`;
+
+  const pre = document.getElementById("template-preview-content");
+  if (pre) {
+    const { frontmatter, body } = renderNoteExample(template);
+    pre.innerHTML =
+      `<span class="tpl-frontmatter">---\n${escapeHtml(frontmatter)}\n---</span>` +
+      `\n\n<span class="tpl-body">${escapeHtml(body)}</span>`;
+  }
+}
+
+function buildTemplateChips() {
+  const container = document.getElementById("template-chips");
+  if (!container) return; // this script is shared across pages — not every page has the picker
+  TEMPLATES.forEach((template) => {
+    const btn = document.createElement("button");
+    btn.className = "template-chip";
+    btn.type = "button";
+    btn.dataset.templateId = template.id;
+    btn.textContent = template.label;
+    btn.addEventListener("click", () => applyTemplatePreview(template.id));
+    container.appendChild(btn);
+  });
+  applyTemplatePreview(DEFAULT_TEMPLATE_ID);
+}
+
+// ---------------------------------------------------------------------------
 // Changelog: fetched live from CHANGELOG.md on `main` rather than duplicated
 // by hand into this page, so it can never go stale relative to the repo.
 // Only a small hand-rolled subset of Keep a Changelog's actual format is
@@ -771,6 +947,7 @@ function initNavToggle(versionPopover) {
 document.addEventListener("DOMContentLoaded", () => {
   buildSwatches();
   initTheme();
+  buildTemplateChips();
   loadChangelog();
   loadLatestRelease();
   initQuickInstall();

@@ -76,6 +76,7 @@
     <button type="button" class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="site-nav">☰</button>
     <nav id="site-nav">
       <a href="#themes">Themes</a>
+      <a href="#templates">Templates</a>
       <a href="#features">Features</a>
       <a href="#install">Install</a>
       <a href="documentation.html">Docs</a>
@@ -192,6 +193,28 @@
     </div>
   </section>
 
+  <section id="templates">
+    <div class="container">
+      <span class="eyebrow">Start faster</span>
+      <h2>12 built-in templates — pick a starting point, not a blank page.</h2>
+      <p class="muted" style="max-width: 62ch;">
+        Every template is a plain <code>.md</code> file, and every note shiki writes carries
+        real YAML frontmatter — here's exactly what you'd get.
+      </p>
+
+      <div class="template-chips" id="template-chips"></div>
+
+      <div class="term-window" style="margin-top: 8px;">
+        <div class="term-titlebar">
+          <span class="term-dot red"></span>
+          <span class="term-dot yellow"></span>
+          <span class="term-dot green"></span>
+          <span class="term-title" id="template-preview-title">shiki — template: meeting</span>
+        </div>
+        <pre class="template-preview" id="template-preview-content"></pre>
+      </div>
+    </div>
+  </section>
 
   <section id="features">
     <div class="container">

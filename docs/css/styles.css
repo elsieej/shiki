@@ -672,6 +672,69 @@ code, .code {
 }
 
 /* ==========================================================================
+   Template picker section — same chip-row-plus-live-preview shape as the
+   theme swatches above (`.swatch`/`.theme-swatches`), just previewing a
+   template's raw markdown instead of a screenshot. `.template-chip` is a
+   distinct class rather than reusing `.swatch` since it has no color dot
+   and its "active" state doesn't repaint the whole page the way a theme
+   pick does — it only swaps the one preview block below it.
+   ========================================================================== */
+
+.template-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 28px 0 20px;
+}
+
+.template-chip {
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--statusbar);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--muted);
+  font-family: inherit;
+}
+
+.template-chip:hover {
+  border-color: var(--accent);
+  color: var(--fg);
+}
+
+.template-chip.active {
+  border-color: var(--accent);
+  color: var(--bg);
+  background: var(--accent);
+}
+
+/* Lives inside the same `.term-window` chrome the Themes section's
+   screenshot does (3 dots + titlebar) — a realistic rendered note (real
+   YAML frontmatter + body, `{{title}}`/`{{date}}` already substituted),
+   not the raw `.md` template source, so this matches what actually lands
+   on disk (see `Note::to_file_contents`, shiki-core/src/note.rs). */
+.template-preview {
+  margin: 0;
+  padding: 18px 20px;
+  min-height: 220px;
+  background: var(--bg);
+  font-size: 0.85rem;
+  line-height: 1.65;
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+
+.template-preview .tpl-frontmatter {
+  color: var(--muted);
+}
+
+.template-preview .tpl-body {
+  color: var(--fg);
+}
+
+/* ==========================================================================
    Install
    ========================================================================== */
 
