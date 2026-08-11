@@ -126,15 +126,21 @@ fn to_syntect_color(color: Color, dark: bool) -> SyntectColor {
 /// `ThemeItem` matching any scope beginning with `selector` (TextMate scope
 /// matching is prefix-based per path component, so `"keyword"` also matches
 /// `keyword.control.ts`, `keyword.operator.js`, etc.).
-fn scope_rule(selector: &str, color: SyntectColor, font_style: Option<FontStyle>) -> Option<ThemeItem> {
-    ScopeSelectors::from_str(selector).ok().map(|scope| ThemeItem {
-        scope,
-        style: StyleModifier {
-            foreground: Some(color),
-            background: None,
-            font_style,
-        },
-    })
+fn scope_rule(
+    selector: &str,
+    color: SyntectColor,
+    font_style: Option<FontStyle>,
+) -> Option<ThemeItem> {
+    ScopeSelectors::from_str(selector)
+        .ok()
+        .map(|scope| ThemeItem {
+            scope,
+            style: StyleModifier {
+                foreground: Some(color),
+                background: None,
+                font_style,
+            },
+        })
 }
 
 /// Builds a `syntect::highlighting::Theme` from `palette` in memory, rather
@@ -344,12 +350,20 @@ mod tests {
             .iter()
             .find(|s| s.content.as_ref() == "const")
             .expect("`const` is tokenized as its own span");
-        assert_eq!(const_span.style.fg, Some(accent), "storage keywords use `accent`");
+        assert_eq!(
+            const_span.style.fg,
+            Some(accent),
+            "storage keywords use `accent`"
+        );
         let string_span = spans
             .iter()
             .find(|s| s.content.as_ref().contains("hi"))
             .expect("the string literal is tokenized as its own span");
-        assert_eq!(string_span.style.fg, Some(success), "string literals use `success`");
+        assert_eq!(
+            string_span.style.fg,
+            Some(success),
+            "string literals use `success`"
+        );
     }
 
     #[test]

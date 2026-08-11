@@ -379,18 +379,16 @@ pub fn borrow_lines<'a>(lines: &'a [Line<'static>]) -> Vec<Line<'a>> {
         .collect()
 }
 
-pub fn markdown_to_lines(
-    body: &str,
-    fg: Color,
-    accent: Color,
-    muted: Color,
-    link: Color,
-    tag: Color,
-    success: Color,
-    warning: Color,
-    dark: bool,
-) -> Vec<Line<'static>> {
-    markdown_to_lines_indexed(body, fg, accent, muted, link, tag, success, warning, dark)
+// Only ever called by this module's own tests — `app.rs`'s real PREVIEW
+// render path always needs the source-line mapping, so it calls
+// `markdown_to_lines_indexed` directly instead. `#[cfg(test)]` (rather than
+// leaving it a plain `pub(crate) fn`) is what it takes to say that honestly:
+// this used to be `pub`, which hid the fact that it had no production
+// caller at all (rustc's dead-code lint skips `pub` items on the assumption
+// something outside the crate might use them).
+#[cfg(test)]
+fn markdown_to_lines(body: &str, colors: &crate::syntax::SyntaxPalette) -> Vec<Line<'static>> {
+    markdown_to_lines_indexed(body, colors)
         .into_iter()
         .map(|(_, line)| line)
         .collect()
@@ -406,17 +404,14 @@ pub fn markdown_to_lines(
 /// consumed but produces no rendered row of its own — its index is reused
 /// by the header-divider row rendered in its place instead, so clicking the
 /// divider still lands on a real source line.
-pub fn markdown_to_lines_indexed(
+pub(crate) fn markdown_to_lines_indexed(
     body: &str,
-    fg: Color,
-    accent: Color,
-    muted: Color,
-    link: Color,
-    tag: Color,
-    success: Color,
-    warning: Color,
-    dark: bool,
+    colors: &crate::syntax::SyntaxPalette,
 ) -> Vec<(usize, Line<'static>)> {
+    let fg = colors.fg;
+    let accent = colors.accent;
+    let muted = colors.muted;
+    let link = colors.link;
     let heading = Style::default().fg(accent).add_modifier(Modifier::BOLD);
     let text = Style::default().fg(fg);
     let dim = Style::default().fg(muted).add_modifier(Modifier::ITALIC);
@@ -426,20 +421,6 @@ pub fn markdown_to_lines_indexed(
     // needing a 20th configurable color just for this.
     let math = Style::default().fg(accent).add_modifier(Modifier::ITALIC);
     let link_style = Style::default().fg(link).add_modifier(Modifier::UNDERLINED);
-    // Built once per call (not per fence) and handed to every
-    // `CodeHighlighter::new` in this note — the whole point of adaptive code
-    // highlighting is that it comes straight from the *active* theme's own
-    // colors, not a syntect-bundled palette; see `syntax::build_runtime_theme`.
-    let syntax_palette = crate::syntax::SyntaxPalette {
-        fg,
-        accent,
-        muted,
-        link,
-        tag,
-        success,
-        warning,
-        dark,
-    };
 
     let mut in_code_block = false;
     let mut in_math_block = false;
@@ -460,7 +441,7 @@ pub fn markdown_to_lines_indexed(
                 code_highlighter = if lang.is_empty() || lang == "mermaid" {
                     None
                 } else {
-                    crate::syntax::CodeHighlighter::new(&lang, &syntax_palette)
+                    crate::syntax::CodeHighlighter::new(&lang, colors)
                 };
                 // The opening fence line itself gets a distinct style when
                 // the language is recognized (real highlighting follows) or
@@ -629,9 +610,16 @@ mod tests {
     const ACCENT: Color = Color::Blue;
     const MUTED: Color = Color::Gray;
     const LINK: Color = Color::Cyan;
-    const TAG: Color = Color::Magenta;
-    const SUCCESS: Color = Color::Green;
-    const WARNING: Color = Color::Yellow;
+    const PALETTE: crate::syntax::SyntaxPalette = crate::syntax::SyntaxPalette {
+        fg: FG,
+        accent: ACCENT,
+        muted: MUTED,
+        link: LINK,
+        tag: Color::Magenta,
+        success: Color::Green,
+        warning: Color::Yellow,
+        dark: true,
+    };
 
     fn line_text(line: &Line) -> String {
         line.spans.iter().map(|s| s.content.as_ref()).collect()
@@ -707,7 +695,7 @@ mod tests {
 
     #[test]
     fn bold_inside_a_blockquote_is_still_bold_not_literal_asterisks() {
-        let lines = markdown_to_lines("> **Warning:** be careful", FG, ACCENT, MUTED, LINK, TAG, SUCCESS, WARNING, true);
+        let lines = markdown_to_lines("> **Warning:** be careful", &PALETTE);
         assert_eq!(lines.len(), 1);
         let full = line_text(&lines[0]);
         assert!(!full.contains('*'), "asterisks must not survive: {full:?}");
@@ -739,14 +727,14 @@ mod tests {
 
     #[test]
     fn horizontal_rule_renders_as_a_visible_divider() {
-        let lines = markdown_to_lines("above\n---\nbelow", FG, ACCENT, MUTED, LINK, TAG, SUCCESS, WARNING, true);
+        let lines = markdown_to_lines("above\n---\nbelow", &PALETTE);
         assert_eq!(line_text(&lines[1]), "─".repeat(40));
     }
 
     #[test]
     fn table_renders_aligned_columns_with_a_header_rule() {
         let body = "| Name | Age |\n| --- | --- |\n| Alice | 30 |\n| Bo | 7 |";
-        let lines = markdown_to_lines(body, FG, ACCENT, MUTED, LINK, TAG, SUCCESS, WARNING, true);
+        let lines = markdown_to_lines(body, &PALETTE);
         // header row + divider row + 2 body rows = 4 lines, no leftover
         // raw `|---|` separator line rendered literally.
         assert_eq!(lines.len(), 4);
@@ -766,7 +754,7 @@ mod tests {
     fn table_like_prose_without_a_real_separator_is_left_alone() {
         // A single line with pipes (e.g. a shell example) but no valid
         // `---`-only separator row after it must not trigger table mode.
-        let lines = markdown_to_lines("ls | grep foo | wc -l", FG, ACCENT, MUTED, LINK, TAG, SUCCESS, WARNING, true);
+        let lines = markdown_to_lines("ls | grep foo | wc -l", &PALETTE);
         assert_eq!(lines.len(), 1);
         assert_eq!(line_text(&lines[0]), "ls | grep foo | wc -l");
     }
@@ -774,7 +762,7 @@ mod tests {
     #[test]
     fn details_summary_is_shown_expanded_with_tags_stripped() {
         let body = "<details>\n<summary>Click to expand</summary>\nhidden content\n</details>";
-        let lines = markdown_to_lines(body, FG, ACCENT, MUTED, LINK, TAG, SUCCESS, WARNING, true);
+        let lines = markdown_to_lines(body, &PALETTE);
         // <details>/</details> themselves produce no line; summary becomes
         // a styled header; the body content still renders normally.
         assert_eq!(lines.len(), 2);
@@ -785,7 +773,7 @@ mod tests {
     #[test]
     fn math_block_is_styled_distinctly_from_code_block() {
         let body = "$$\nx = y\n$$";
-        let lines = markdown_to_lines(body, FG, ACCENT, MUTED, LINK, TAG, SUCCESS, WARNING, true);
+        let lines = markdown_to_lines(body, &PALETTE);
         assert_eq!(lines.len(), 3);
         // Content line inside the math block uses `accent`, not `muted`
         // (which code fences use) — the whole point of the distinction.
@@ -795,7 +783,7 @@ mod tests {
     #[test]
     fn tsx_fence_gets_real_per_token_highlighting_not_flat_dim() {
         let body = "```tsx\nconst x = 1;\n```";
-        let lines = markdown_to_lines(body, FG, ACCENT, MUTED, LINK, TAG, SUCCESS, WARNING, true);
+        let lines = markdown_to_lines(body, &PALETTE);
         assert_eq!(lines.len(), 3);
         // Before real highlighting existed (and before `tsx` was a
         // recognized language at all — plain syntect's bundled defaults

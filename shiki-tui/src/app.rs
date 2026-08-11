@@ -2198,10 +2198,17 @@ impl App {
         }
         let body = note.body.clone();
         let dark = crate::render::is_dark_color(colors[4]);
-        let indexed = crate::render::markdown_to_lines_indexed(
-            &body, colors[0], colors[1], colors[2], colors[3], colors[5], colors[6], colors[7],
+        let palette = crate::syntax::SyntaxPalette {
+            fg: colors[0],
+            accent: colors[1],
+            muted: colors[2],
+            link: colors[3],
+            tag: colors[5],
+            success: colors[6],
+            warning: colors[7],
             dark,
-        );
+        };
+        let indexed = crate::render::markdown_to_lines_indexed(&body, &palette);
         let (source_indices, plain_lines): (Vec<usize>, Vec<Line<'static>>) =
             indexed.into_iter().unzip();
         let grouped = crate::wrap::wrap_lines_grouped(&plain_lines, width);
