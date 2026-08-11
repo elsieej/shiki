@@ -50,12 +50,13 @@ pub fn git_status_suffix(gs: &shiki_core::git::GitStatus) -> String {
 }
 
 /// Whether a resolved theme color reads as "dark" (perceptual luminance
-/// under half) — used to pick a syntect syntax-highlighting theme
-/// (`syntax::CodeHighlighter`) that won't clash with the active shiki theme
-/// (e.g. a light-on-light syntect theme under catppuccin-latte). `Reset`
-/// (the "default" theme's un-set background) defaults to `true` — most
-/// terminals default to a dark background, and a wrong guess here only
-/// affects code-fence coloring, not correctness.
+/// under half) — feeds `syntax::SyntaxPalette.dark`, which only matters for
+/// `Color::Reset`/`Color::Indexed` theme slots (the "default" theme's
+/// terminal-native colors, which have no fixed RGB `syntect` can use): a
+/// dark-background terminal gets a light fallback text color for code-fence
+/// tokens that inherit those slots, and vice versa. `Reset` itself defaults
+/// to `true` — most terminals default to a dark background, and a wrong
+/// guess here only affects code-fence coloring, not correctness.
 pub fn is_dark_color(color: Color) -> bool {
     match color {
         Color::Rgb(r, g, b) => {
@@ -384,9 +385,12 @@ pub fn markdown_to_lines(
     accent: Color,
     muted: Color,
     link: Color,
+    tag: Color,
+    success: Color,
+    warning: Color,
     dark: bool,
 ) -> Vec<Line<'static>> {
-    markdown_to_lines_indexed(body, fg, accent, muted, link, dark)
+    markdown_to_lines_indexed(body, fg, accent, muted, link, tag, success, warning, dark)
         .into_iter()
         .map(|(_, line)| line)
         .collect()
@@ -408,6 +412,9 @@ pub fn markdown_to_lines_indexed(
     accent: Color,
     muted: Color,
     link: Color,
+    tag: Color,
+    success: Color,
+    warning: Color,
     dark: bool,
 ) -> Vec<(usize, Line<'static>)> {
     let heading = Style::default().fg(accent).add_modifier(Modifier::BOLD);
@@ -419,6 +426,20 @@ pub fn markdown_to_lines_indexed(
     // needing a 20th configurable color just for this.
     let math = Style::default().fg(accent).add_modifier(Modifier::ITALIC);
     let link_style = Style::default().fg(link).add_modifier(Modifier::UNDERLINED);
+    // Built once per call (not per fence) and handed to every
+    // `CodeHighlighter::new` in this note — the whole point of adaptive code
+    // highlighting is that it comes straight from the *active* theme's own
+    // colors, not a syntect-bundled palette; see `syntax::build_runtime_theme`.
+    let syntax_palette = crate::syntax::SyntaxPalette {
+        fg,
+        accent,
+        muted,
+        link,
+        tag,
+        success,
+        warning,
+        dark,
+    };
 
     let mut in_code_block = false;
     let mut in_math_block = false;
@@ -439,7 +460,7 @@ pub fn markdown_to_lines_indexed(
                 code_highlighter = if lang.is_empty() || lang == "mermaid" {
                     None
                 } else {
-                    crate::syntax::CodeHighlighter::new(&lang, dark)
+                    crate::syntax::CodeHighlighter::new(&lang, &syntax_palette)
                 };
                 // The opening fence line itself gets a distinct style when
                 // the language is recognized (real highlighting follows) or
@@ -608,6 +629,9 @@ mod tests {
     const ACCENT: Color = Color::Blue;
     const MUTED: Color = Color::Gray;
     const LINK: Color = Color::Cyan;
+    const TAG: Color = Color::Magenta;
+    const SUCCESS: Color = Color::Green;
+    const WARNING: Color = Color::Yellow;
 
     fn line_text(line: &Line) -> String {
         line.spans.iter().map(|s| s.content.as_ref()).collect()
@@ -683,7 +707,7 @@ mod tests {
 
     #[test]
     fn bold_inside_a_blockquote_is_still_bold_not_literal_asterisks() {
-        let lines = markdown_to_lines("> **Warning:** be careful", FG, ACCENT, MUTED, LINK, true);
+        let lines = markdown_to_lines("> **Warning:** be careful", FG, ACCENT, MUTED, LINK, TAG, SUCCESS, WARNING, true);
         assert_eq!(lines.len(), 1);
         let full = line_text(&lines[0]);
         assert!(!full.contains('*'), "asterisks must not survive: {full:?}");
@@ -715,14 +739,14 @@ mod tests {
 
     #[test]
     fn horizontal_rule_renders_as_a_visible_divider() {
-        let lines = markdown_to_lines("above\n---\nbelow", FG, ACCENT, MUTED, LINK, true);
+        let lines = markdown_to_lines("above\n---\nbelow", FG, ACCENT, MUTED, LINK, TAG, SUCCESS, WARNING, true);
         assert_eq!(line_text(&lines[1]), "─".repeat(40));
     }
 
     #[test]
     fn table_renders_aligned_columns_with_a_header_rule() {
         let body = "| Name | Age |\n| --- | --- |\n| Alice | 30 |\n| Bo | 7 |";
-        let lines = markdown_to_lines(body, FG, ACCENT, MUTED, LINK, true);
+        let lines = markdown_to_lines(body, FG, ACCENT, MUTED, LINK, TAG, SUCCESS, WARNING, true);
         // header row + divider row + 2 body rows = 4 lines, no leftover
         // raw `|---|` separator line rendered literally.
         assert_eq!(lines.len(), 4);
@@ -742,7 +766,7 @@ mod tests {
     fn table_like_prose_without_a_real_separator_is_left_alone() {
         // A single line with pipes (e.g. a shell example) but no valid
         // `---`-only separator row after it must not trigger table mode.
-        let lines = markdown_to_lines("ls | grep foo | wc -l", FG, ACCENT, MUTED, LINK, true);
+        let lines = markdown_to_lines("ls | grep foo | wc -l", FG, ACCENT, MUTED, LINK, TAG, SUCCESS, WARNING, true);
         assert_eq!(lines.len(), 1);
         assert_eq!(line_text(&lines[0]), "ls | grep foo | wc -l");
     }
@@ -750,7 +774,7 @@ mod tests {
     #[test]
     fn details_summary_is_shown_expanded_with_tags_stripped() {
         let body = "<details>\n<summary>Click to expand</summary>\nhidden content\n</details>";
-        let lines = markdown_to_lines(body, FG, ACCENT, MUTED, LINK, true);
+        let lines = markdown_to_lines(body, FG, ACCENT, MUTED, LINK, TAG, SUCCESS, WARNING, true);
         // <details>/</details> themselves produce no line; summary becomes
         // a styled header; the body content still renders normally.
         assert_eq!(lines.len(), 2);
@@ -761,10 +785,34 @@ mod tests {
     #[test]
     fn math_block_is_styled_distinctly_from_code_block() {
         let body = "$$\nx = y\n$$";
-        let lines = markdown_to_lines(body, FG, ACCENT, MUTED, LINK, true);
+        let lines = markdown_to_lines(body, FG, ACCENT, MUTED, LINK, TAG, SUCCESS, WARNING, true);
         assert_eq!(lines.len(), 3);
         // Content line inside the math block uses `accent`, not `muted`
         // (which code fences use) — the whole point of the distinction.
         assert_eq!(lines[1].spans[0].style.fg, Some(ACCENT));
+    }
+
+    #[test]
+    fn tsx_fence_gets_real_per_token_highlighting_not_flat_dim() {
+        let body = "```tsx\nconst x = 1;\n```";
+        let lines = markdown_to_lines(body, FG, ACCENT, MUTED, LINK, TAG, SUCCESS, WARNING, true);
+        assert_eq!(lines.len(), 3);
+        // Before real highlighting existed (and before `tsx` was a
+        // recognized language at all — plain syntect's bundled defaults
+        // don't include TypeScript/TSX), every span on this row shared the
+        // exact same `dim`/`muted` style. Now the line must be tokenized
+        // into more than one span, with at least one span colored something
+        // other than plain `fg`/`muted`.
+        let code_line = &lines[1];
+        assert!(
+            code_line.spans.len() > 1,
+            "expected the code line to be tokenized into multiple spans, got {code_line:?}"
+        );
+        let distinct_colors: std::collections::HashSet<_> =
+            code_line.spans.iter().map(|s| s.style.fg).collect();
+        assert!(
+            distinct_colors.len() > 1,
+            "expected multiple distinct token colors, got {distinct_colors:?}"
+        );
     }
 }

@@ -28,6 +28,17 @@ tokio = { version = "1", features = ["full"] }
 git2 = { version = "0.21", features = ["ssh", "https", "vendored-libgit2", "vendored-openssl"] }
 comrak = "0.54"
 syntect = "5"
+# Bundles ~150 extra syntect syntax definitions (from bat's asset collection)
+# on top of syntect's own bundled defaults — notably TypeScript/TSX, which
+# syntect's `SyntaxSet::load_defaults_newlines` doesn't include at all, so a
+# ```tsx fence fell back to flat dimmed text with no per-token color before
+# this. `default-features = false` + `syntect-fancy` picks the same
+# fancy-regex backend `syntect` above already defaults to (not `syntect-onig`,
+# which needs a C regex engine) so the two crates share one syntect build
+# instead of pulling in both regex backends.
+two-face = { version = "0.5", default-features = false, features = [
+    "syntect-fancy",
+] }
 ratatui-textarea = "0.9"
 nucleo-matcher = "0.3"
 serde = { version = "1", features = ["derive"] }

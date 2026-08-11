@@ -457,21 +457,24 @@ pub(crate) enum DeleteTarget {
     Notebook,
 }
 
-/// `(note path, [fg, accent, muted, link, bg, tag], content width, formatted
-/// lines, source-line-per-row)` — see `App::note_preview_cache`'s own doc
-/// comment for what each element means. `bg`/`tag` ride along in the same
-/// array purely so they participate in the cache-key equality check (`bg`
-/// drives `render::is_dark_color`, which picks the syntect syntax-
-/// highlighting theme for code fences; `tag` colors the metadata header's
-/// `#tag` spans — see `panel_preview::metadata_lines`) without two more
-/// tuple fields. Named only to keep clippy's `type_complexity` lint quiet;
-/// still just a plain tuple everywhere it's used. Source-line-per-row is
-/// `None` for the metadata header's own rows (there's no corresponding
-/// `note.body` line to jump to on click) and `Some(line)` for every real
-/// body row, same as before.
+/// `(note path, [fg, accent, muted, link, bg, tag, success, warning], content
+/// width, formatted lines, source-line-per-row)` — see
+/// `App::note_preview_cache`'s own doc comment for what each element means.
+/// `bg`/`tag`/`success`/`warning` ride along in the same array purely so they
+/// participate in the cache-key equality check (`bg` drives
+/// `render::is_dark_color`, which decides the `dark` fallback
+/// `syntax::SyntaxPalette` uses for terminal-native colors with no fixed RGB;
+/// `tag` colors the metadata header's `#tag` spans, see
+/// `panel_preview::metadata_lines`; `success`/`warning` are two more of the
+/// colors `syntax::build_runtime_theme` maps code-fence tokens onto — see
+/// `render::markdown_to_lines_indexed`) without more tuple fields. Named only
+/// to keep clippy's `type_complexity` lint quiet; still just a plain tuple
+/// everywhere it's used. Source-line-per-row is `None` for the metadata
+/// header's own rows (there's no corresponding `note.body` line to jump to
+/// on click) and `Some(line)` for every real body row, same as before.
 type NotePreviewCache = (
     std::path::PathBuf,
-    [Color; 6],
+    [Color; 8],
     u16,
     Vec<Line<'static>>,
     Vec<Option<usize>>,
@@ -2179,6 +2182,8 @@ impl App {
             hex_to_color(&self.theme.link),
             hex_to_color(&self.theme.bg),
             hex_to_color(&self.theme.tag),
+            hex_to_color(&self.theme.success),
+            hex_to_color(&self.theme.warning),
         ];
         let width = layout::split(self.last_frame_area, self.focus, self.zen_mode)
             .preview
@@ -2194,7 +2199,8 @@ impl App {
         let body = note.body.clone();
         let dark = crate::render::is_dark_color(colors[4]);
         let indexed = crate::render::markdown_to_lines_indexed(
-            &body, colors[0], colors[1], colors[2], colors[3], dark,
+            &body, colors[0], colors[1], colors[2], colors[3], colors[5], colors[6], colors[7],
+            dark,
         );
         let (source_indices, plain_lines): (Vec<usize>, Vec<Line<'static>>) =
             indexed.into_iter().unzip();
