@@ -35,6 +35,8 @@ pub fn builtins() -> Vec<SlashCommand> {
         builtin("h1", "Heading 1", "# {{cursor}}"),
         builtin("h2", "Heading 2", "## {{cursor}}"),
         builtin("h3", "Heading 3", "### {{cursor}}"),
+        builtin("bold", "Bold text", "**{{cursor}}**"),
+        builtin("italic", "Italic text", "*{{cursor}}*"),
         builtin("code", "Code block", "```\n{{cursor}}\n```"),
         builtin("math", "Math block", "$$\n{{cursor}}\n$$"),
         builtin(
